@@ -15,17 +15,17 @@ export interface UserAttributes {
     isOnline?: boolean;
     socketId?: string | null;
     // Driver registration fields
-    idCardNumber?: string;
-    address?: string;
-    driverPhoto?: string;
-    idCardPhoto?: string;
-    vehiclePhotos?: string[];
-    vehicleBrand?: string;
-    vehicleModel?: string;
-    vehiclePlate?: string;
-    vehicleColor?: string;
-    vehicleTypeId?: string;
-    isApproved?: boolean;
+    idCardNumber?: string | null;
+    address?: string | null;
+    driverPhoto?: string | null;
+    idCardPhoto?: string | null;
+    vehiclePhotos?: string[] | null;
+    vehicleBrand?: string | null;
+    vehicleModel?: string | null;
+    vehiclePlate?: string | null;
+    vehicleColor?: string | null;
+    vehicleTypeId?: string | null;
+    isApproved?: boolean | null;
 }
 
 export class User extends Model<UserAttributes> implements UserAttributes {
@@ -41,17 +41,17 @@ export class User extends Model<UserAttributes> implements UserAttributes {
     public isOnline!: boolean;
     public socketId!: string | null;
     // Driver registration fields
-    public idCardNumber!: string;
-    public address!: string;
-    public driverPhoto!: string;
-    public idCardPhoto!: string;
-    public vehiclePhotos!: string[];
-    public vehicleBrand!: string;
-    public vehicleModel!: string;
-    public vehiclePlate!: string;
-    public vehicleColor!: string;
-    public vehicleTypeId!: string;
-    public isApproved!: boolean;
+    public idCardNumber!: string | null;
+    public address!: string | null;
+    public driverPhoto!: string | null;
+    public idCardPhoto!: string | null;
+    public vehiclePhotos!: string[] | null;
+    public vehicleBrand!: string | null;
+    public vehicleModel!: string | null;
+    public vehiclePlate!: string | null;
+    public vehicleColor!: string | null;
+    public vehicleTypeId!: string | null;
+    public isApproved!: boolean | null;
 
     public async validatePassword(password: string): Promise<boolean> {
         return bcrypt.compare(password, this.password);

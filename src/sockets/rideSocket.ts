@@ -62,7 +62,7 @@ export const initializeSockets = (io: Server) => {
                     status: 'REQUESTED',
                 });
 
-                // Broadcast to drivers with matching vehicle type
+                // Broadcast to drivers with matching vehicle type and proximity
                 const drivers = await User.findAll({
                     where: {
                         role: 'driver',
@@ -71,9 +71,18 @@ export const initializeSockets = (io: Server) => {
                     }
                 });
 
+                const passenger = await User.findByPk(socket.user.id);
+
                 drivers.forEach(driver => {
-                    if (driver.socketId) {
-                        io.to(driver.socketId).emit('newRideRequest', ride);
+                    if (driver.socketId && driver.latitude && driver.longitude) {
+                        const dist = getDistanceFromLatLonInKm(data.pickupLat, data.pickupLng, driver.latitude, driver.longitude);
+                        if (dist <= 10) { // Only notify drivers within 10km
+                            io.to(driver.socketId).emit('newRideRequest', {
+                                ...ride.toJSON(),
+                                passengerName: passenger?.name || 'Passager',
+                                distanceToPickup: dist
+                            });
+                        }
                     }
                 });
 
