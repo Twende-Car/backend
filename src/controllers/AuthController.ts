@@ -40,6 +40,10 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
+        if (user.role === 'driver' && !user.isApproved) {
+            return res.status(403).json({ message: 'Your account is pending approval.' });
+        }
+
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role },
             process.env.JWT_SECRET || 'secret_key',

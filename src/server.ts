@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import { sequelize } from './config/database';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -27,6 +28,7 @@ const host = process.env.HOST || '0.0.0.0';
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/auth', authRoutes);
 app.use('/rides', rideRoutes);

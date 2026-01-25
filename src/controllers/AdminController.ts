@@ -85,7 +85,7 @@ export const getVehicleTypes = async (req: Request, res: Response) => {
 
 export const updateVehicleType = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const { name, pricePerKm, description } = req.body;
         const vehicleType = await VehicleType.findByPk(id);
         if (!vehicleType) {
@@ -101,7 +101,7 @@ export const updateVehicleType = async (req: Request, res: Response) => {
 
 export const deleteVehicleType = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const vehicleType = await VehicleType.findByPk(id);
         if (!vehicleType) {
             return res.status(404).json({ message: 'Vehicle type not found' });
