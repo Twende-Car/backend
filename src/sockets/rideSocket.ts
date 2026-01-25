@@ -2,6 +2,7 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { Ride } from '../models/Ride';
+import { RideOffer } from '../models/RideOffer';
 import { Op } from 'sequelize';
 
 interface AuthSocket extends Socket {
@@ -37,7 +38,6 @@ export const initializeSockets = (io: Server) => {
         });
 
         socket.on('requestRide', async (data: {
-            driverId?: string;
             pickupLat: number;
             pickupLng: number;
             dropoffLat: number;
@@ -46,13 +46,11 @@ export const initializeSockets = (io: Server) => {
             dropoffAddress?: string;
             distance?: number;
             vehicleTypeId: string;
-            fare: number
         }) => {
             try {
-                // Create Ride
+                // Create Ride without fare (will be decided via bidding)
                 const ride = await Ride.create({
                     passengerId: socket.user.id,
-                    driverId: data.driverId || null,
                     pickupLat: data.pickupLat,
                     pickupLng: data.pickupLng,
                     dropoffLat: data.dropoffLat,
@@ -62,39 +60,138 @@ export const initializeSockets = (io: Server) => {
                     distance: data.distance || null,
                     vehicleTypeId: data.vehicleTypeId,
                     status: 'REQUESTED',
-                    fare: data.fare
                 });
 
-                if (data.driverId) {
-                    // Targeted request
-                    const driver = await User.findByPk(data.driverId);
-                    if (driver && driver.socketId && driver.isOnline) {
-                        io.to(driver.socketId).emit('newRideRequest', {
-                            ...ride.toJSON(),
-                            passengerName: socket.user.name || 'Passenger'
-                        });
+                // Broadcast to drivers with matching vehicle type
+                const drivers = await User.findAll({
+                    where: {
+                        role: 'driver',
+                        isOnline: true,
+                        vehicleTypeId: data.vehicleTypeId
                     }
-                } else {
-                    // Broadcast to nearby drivers
-                    const drivers = await User.findAll({ where: { role: 'driver', isOnline: true } });
-                    const driversNearby = drivers.filter(driver => {
-                        if (!driver.latitude || !driver.longitude) return false;
-                        const dist = getDistanceFromLatLonInKm(data.pickupLat, data.pickupLng, driver.latitude, driver.longitude);
-                        return dist <= 10;
-                    });
+                });
 
-                    driversNearby.forEach(driver => {
-                        if (driver.socketId) {
-                            io.to(driver.socketId).emit('newRideRequest', ride);
-                        }
-                    });
-                }
+                drivers.forEach(driver => {
+                    if (driver.socketId) {
+                        io.to(driver.socketId).emit('newRideRequest', ride);
+                    }
+                });
 
                 socket.emit('rideRequested', ride);
 
             } catch (error) {
                 console.error('Ride request error', error);
                 socket.emit('error', { message: 'Failed to request ride' });
+            }
+        });
+
+        socket.on('submitOffer', async (data: { rideId: string, price: number }) => {
+            try {
+                const offer = await RideOffer.create({
+                    rideId: data.rideId,
+                    driverId: socket.user.id,
+                    price: data.price,
+                    status: 'PENDING'
+                });
+
+                const ride = await Ride.findByPk(data.rideId);
+                if (ride) {
+                    const passenger = await User.findByPk(ride.passengerId);
+                    if (passenger && passenger.socketId) {
+                        const driver = await User.findByPk(socket.user.id);
+                        io.to(passenger.socketId).emit('newOffer', {
+                            offer,
+                            driver: {
+                                name: driver?.name,
+                                rating: 4.5, // Mock rating
+                                vehicleModel: driver?.vehicleBrand + ' ' + driver?.vehicleModel,
+                                vehicleColor: driver?.vehicleColor
+                            }
+                        });
+                    }
+                }
+                socket.emit('offerSubmitted', offer);
+            } catch (error) {
+                console.error('Submit offer error:', error);
+                socket.emit('error', { message: 'Failed to submit offer' });
+            }
+        });
+
+        socket.on('acceptOffer', async (data: { offerId: string }) => {
+            try {
+                const offer = await RideOffer.findByPk(data.offerId);
+                if (!offer) return socket.emit('error', { message: 'Offer not found' });
+
+                const ride = await Ride.findByPk(offer.rideId);
+                if (!ride || ride.status !== 'REQUESTED') return socket.emit('error', { message: 'Ride not available' });
+
+                // Update offer and ride
+                offer.status = 'ACCEPTED';
+                await offer.save();
+
+                ride.driverId = offer.driverId;
+                ride.fare = offer.price;
+                ride.status = 'ACCEPTED';
+
+                const driver = await User.findByPk(offer.driverId);
+                if (driver) {
+                    ride.vehicleModel = driver.vehicleModel;
+                    ride.vehicleColor = driver.vehicleColor;
+                    ride.vehicleRegistration = driver.vehiclePlate;
+                }
+                await ride.save();
+
+                // Reject other offers
+                await RideOffer.update(
+                    { status: 'REJECTED' },
+                    { where: { rideId: ride.id, id: { [Op.ne]: offer.id } } }
+                );
+
+                // Notify driver
+                if (driver && driver.socketId) {
+                    io.to(driver.socketId).emit('offerAccepted', { ride });
+                }
+
+                // Notify passenger
+                socket.emit('rideAcceptedSuccess', { ride, driver });
+
+            } catch (error) {
+                console.error('Accept offer error:', error);
+                socket.emit('error', { message: 'Failed to accept offer' });
+            }
+        });
+
+        socket.on('confirmStart', async (data: { rideId: string }) => {
+            try {
+                const ride = await Ride.findByPk(data.rideId);
+                if (!ride) return socket.emit('error', { message: 'Ride not found' });
+
+                if (socket.user.id === ride.passengerId) {
+                    ride.passengerConfirmedStart = true;
+                } else if (socket.user.id === ride.driverId) {
+                    ride.driverConfirmedStart = true;
+                }
+
+                await ride.save();
+
+                // Notify both
+                const passenger = await User.findByPk(ride.passengerId);
+                const driver = await User.findByPk(ride.driverId!);
+
+                if (passenger?.socketId) io.to(passenger.socketId).emit('startConfirmed', { by: socket.user.role, ride });
+                if (driver?.socketId) io.to(driver.socketId).emit('startConfirmed', { by: socket.user.role, ride });
+
+                // If both confirmed, start the ride
+                if (ride.passengerConfirmedStart && ride.driverConfirmedStart) {
+                    ride.status = 'IN_PROGRESS';
+                    ride.startTime = new Date();
+                    await ride.save();
+
+                    if (passenger?.socketId) io.to(passenger.socketId).emit('rideStarted', ride);
+                    if (driver?.socketId) io.to(driver.socketId).emit('rideStarted', ride);
+                }
+            } catch (error) {
+                socket.emit('error', { message: 'Failed to confirm start' });
             }
         });
 
@@ -115,68 +212,6 @@ export const initializeSockets = (io: Server) => {
             }
         });
 
-        socket.on('acceptRide', async (data: { rideId: string }) => {
-            try {
-                const ride = await Ride.findByPk(data.rideId);
-                if (!ride || ride.status !== 'REQUESTED') {
-                    return socket.emit('error', { message: 'Ride not available' });
-                }
-
-                const driver = await User.findByPk(socket.user.id);
-                if (!driver) {
-                    return socket.emit('error', { message: 'Driver not found' });
-                }
-
-                ride.driverId = driver.id;
-                ride.status = 'ACCEPTED';
-
-                // Copy vehicle info to ride record if available
-                if (driver.vehicleInfo) {
-                    const vInfo = driver.vehicleInfo as any;
-                    ride.vehicleModel = vInfo.model || null;
-                    ride.vehicleColor = vInfo.color || null;
-                    ride.vehicleRegistration = vInfo.registration || null;
-                }
-
-                await ride.save();
-
-                const passenger = await User.findByPk(ride.passengerId);
-                if (passenger && passenger.socketId) {
-                    // Send notification with driver and vehicle details
-                    io.to(passenger.socketId).emit('rideAccepted', {
-                        ride: ride,
-                        driver: {
-                            name: driver.name,
-                            phoneNumber: driver.phoneNumber,
-                            vehicleModel: ride.vehicleModel,
-                            vehicleColor: ride.vehicleColor,
-                            vehicleRegistration: ride.vehicleRegistration
-                        }
-                    });
-                }
-                socket.emit('rideAcceptedSuccess', ride);
-            } catch (error) {
-                console.error('Accept ride error:', error);
-                socket.emit('error', { message: 'Failed to accept ride' });
-            }
-        });
-
-        // Start Ride
-        socket.on('startRide', async (data: { rideId: string }) => {
-            const ride = await Ride.findByPk(data.rideId);
-            if (ride && ride.driverId === socket.user.id) {
-                ride.status = 'IN_PROGRESS';
-                ride.startTime = new Date();
-                await ride.save();
-
-                const passenger = await User.findByPk(ride.passengerId);
-                if (passenger && passenger.socketId) {
-                    io.to(passenger.socketId).emit('rideStarted', ride);
-                }
-            }
-        });
-
-        // Complete Ride
         socket.on('completeRide', async (data: { rideId: string }) => {
             const ride = await Ride.findByPk(data.rideId);
             if (ride && ride.driverId === socket.user.id) {
@@ -204,7 +239,7 @@ export const initializeSockets = (io: Server) => {
 // Helper for distance calculation
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     var R = 6371; // Radius of the earth in km
-    var dLat = deg2rad(lat2 - lat1);  // deg2rad below
+    var dLat = deg2rad(lat2 - lat1);
     var dLon = deg2rad(lon2 - lon1);
     var a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +

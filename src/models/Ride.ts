@@ -21,6 +21,8 @@ export interface RideAttributes {
     startTime?: Date | null;
     endTime?: Date | null;
     fare?: number | null;
+    passengerConfirmedStart?: boolean;
+    driverConfirmedStart?: boolean;
 }
 
 export class Ride extends Model<RideAttributes> implements RideAttributes {
@@ -42,6 +44,8 @@ export class Ride extends Model<RideAttributes> implements RideAttributes {
     public startTime!: Date | null;
     public endTime!: Date | null;
     public fare!: number | null;
+    public passengerConfirmedStart!: boolean;
+    public driverConfirmedStart!: boolean;
 }
 
 Ride.init(
@@ -118,7 +122,15 @@ Ride.init(
         fare: {
             type: DataTypes.FLOAT,
             allowNull: true,
-        }
+        },
+        passengerConfirmedStart: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        driverConfirmedStart: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
     },
     {
         sequelize,
