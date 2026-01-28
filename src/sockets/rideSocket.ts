@@ -35,6 +35,27 @@ export const initializeSockets = (io: Server) => {
                 { latitude: data.lat, longitude: data.lng },
                 { where: { id: socket.user.id } }
             );
+
+            // If user is a driver and has an active ride (ACCEPTED or IN_PROGRESS), notify the passenger
+            if (socket.user.role === 'driver') {
+                const activeRide = await Ride.findOne({
+                    where: {
+                        driverId: socket.user.id,
+                        status: { [Op.in]: ['ACCEPTED', 'IN_PROGRESS'] }
+                    }
+                });
+
+                if (activeRide) {
+                    const passenger = await User.findByPk(activeRide.passengerId);
+                    if (passenger && passenger.socketId) {
+                        io.to(passenger.socketId).emit('driverLocationUpdate', {
+                            lat: data.lat,
+                            lng: data.lng,
+                            rideId: activeRide.id
+                        });
+                    }
+                }
+            }
         });
 
         socket.on('requestRide', async (data: {
