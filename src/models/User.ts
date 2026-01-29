@@ -7,7 +7,7 @@ export interface UserAttributes {
     name: string;
     email: string;
     password?: string;
-    role: 'client' | 'driver';
+    role: 'client' | 'driver' | 'admin';
     phoneNumber: string;
     vehicleInfo?: object | null;
     latitude?: number | null;
@@ -33,7 +33,7 @@ export class User extends Model<UserAttributes> implements UserAttributes {
     public name!: string;
     public email!: string;
     public password!: string;
-    public role!: 'client' | 'driver';
+    public role!: 'client' | 'driver' | 'admin';
     public phoneNumber!: string;
     public vehicleInfo!: object | null;
     public latitude!: number | null;
@@ -82,7 +82,7 @@ User.init(
             allowNull: false,
         },
         role: {
-            type: DataTypes.ENUM('client', 'driver'),
+            type: DataTypes.ENUM('client', 'driver', 'admin'),
             allowNull: false,
         },
         phoneNumber: {
