@@ -226,19 +226,28 @@ export const initializeSockets = (io: Server) => {
         });
 
         socket.on('cancelRide', async (data: { rideId: string }) => {
-            const ride = await Ride.findByPk(data.rideId);
-            if (ride) {
-                ride.status = 'CANCELLED';
-                await ride.save();
+            try {
+                const ride = await Ride.findByPk(data.rideId);
+                if (ride) {
+                    const oldStatus = ride.status;
+                    ride.status = 'CANCELLED';
+                    await ride.save();
 
-                // Inform driver if assigned
-                if (ride.driverId) {
-                    const driver = await User.findByPk(ride.driverId);
-                    if (driver && driver.socketId) {
-                        io.to(driver.socketId).emit('rideCancelled', { rideId: ride.id });
+                    if (oldStatus === 'REQUESTED') {
+                        // Notify all drivers to remove it from their available list
+                        socket.broadcast.emit('rideCancelled', { rideId: ride.id });
+                    } else if (ride.driverId) {
+                        // Inform only assigned driver
+                        const driver = await User.findByPk(ride.driverId);
+                        if (driver && driver.socketId) {
+                            io.to(driver.socketId).emit('rideCancelled', { rideId: ride.id });
+                        }
                     }
+                    socket.emit('rideCancelledSuccess', { rideId: ride.id });
                 }
-                socket.emit('rideCancelledSuccess', { rideId: ride.id });
+            } catch (error) {
+                console.error('Cancel ride error:', error);
+                socket.emit('error', { message: 'Failed to cancel ride' });
             }
         });
 
