@@ -10,12 +10,19 @@ interface AuthRequest extends Request {
 }
 
 const isAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user) {
+    if (req.user && req.user.role === 'admin') {
         next();
     } else {
         res.status(403).json({ message: 'Access denied. Admin role required.' });
     }
 };
+
+//get vehicule type without auth
+router.get('/vehicle-types', getVehicleTypes);
+
+//pending driver for all connected users
+router.get('/pending-drivers', authMiddleware, getPendingDrivers);
+
 
 // Apply security to all routes
 router.use(authMiddleware as any);
@@ -26,12 +33,10 @@ router.get('/users', getUsers);
 router.get('/rides', getAllRides);
 
 // Driver Management
-router.get('/pending-drivers', getPendingDrivers);
 router.put('/approve-driver/:id', approveDriver);
 
 // Vehicle Type Pricing Management
 router.post('/vehicle-types', createVehicleType);
-router.get('/vehicle-types', getVehicleTypes);
 router.put('/vehicle-types/:id', updateVehicleType);
 router.delete('/vehicle-types/:id', deleteVehicleType);
 
