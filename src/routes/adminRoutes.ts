@@ -22,6 +22,7 @@ router.get('/vehicle-types', getVehicleTypes);
 
 //pending driver for all connected users
 router.get('/pending-drivers', authMiddleware, getPendingDrivers);
+router.get('/rides', authMiddleware, getAllRides);
 
 
 // Apply security to all routes
@@ -30,7 +31,7 @@ router.use(isAdmin as any);
 
 router.get('/stats', getStats);
 router.get('/users', getUsers);
-router.get('/rides', getAllRides);
+
 
 // Driver Management
 router.put('/approve-driver/:id', approveDriver);
