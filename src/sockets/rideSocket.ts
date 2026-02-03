@@ -135,7 +135,9 @@ export const initializeSockets = (io: Server) => {
                                 name: driver?.name,
                                 rating: 4.5, // Mock rating
                                 vehicleModel: driver?.vehicleBrand + ' ' + driver?.vehicleModel,
-                                vehicleColor: driver?.vehicleColor
+                                vehicleColor: driver?.vehicleColor,
+                                vehiclePlate: driver?.vehiclePlate,
+                                vehiclePhoto: driver?.vehiclePhotos?.[0] ? (driver.vehiclePhotos[0].startsWith('/') ? driver.vehiclePhotos[0] : `/${driver.vehiclePhotos[0]}`) : null
                             }
                         });
                     }
@@ -179,11 +181,34 @@ export const initializeSockets = (io: Server) => {
 
                 // Notify driver
                 if (driver && driver.socketId) {
-                    io.to(driver.socketId).emit('offerAccepted', { ride });
+                    const passenger = await User.findByPk(ride.passengerId, { attributes: ['id', 'name', 'phoneNumber', 'driverPhoto'] });
+                    const passengerData = passenger ? {
+                        id: passenger.id,
+                        name: passenger.name,
+                        phoneNumber: passenger.phoneNumber,
+                        photo: passenger.driverPhoto ? (passenger.driverPhoto.startsWith('/') ? passenger.driverPhoto : `/${passenger.driverPhoto}`) : null
+                    } : null;
+                    io.to(driver.socketId).emit('offerAccepted', { ride, passenger: passengerData });
                 }
 
                 // Notify passenger
-                socket.emit('rideAcceptedSuccess', { ride, driver });
+                if (driver) {
+                    socket.emit('rideAcceptedSuccess', {
+                        ride,
+                        driver: {
+                            id: driver.id,
+                            name: driver.name,
+                            phoneNumber: driver.phoneNumber,
+                            vehicleBrand: driver.vehicleBrand,
+                            vehicleModel: driver.vehicleModel,
+                            vehiclePlate: driver.vehiclePlate,
+                            vehicleColor: driver.vehicleColor,
+                            vehiclePhoto: driver.vehiclePhotos?.[0] ? (driver.vehiclePhotos[0].startsWith('/') ? driver.vehiclePhotos[0] : `/${driver.vehiclePhotos[0]}`) : null
+                        }
+                    });
+                } else {
+                    socket.emit('rideAcceptedSuccess', { ride, driver: null });
+                }
 
             } catch (error) {
                 console.error('Accept offer error:', error);
@@ -205,11 +230,11 @@ export const initializeSockets = (io: Server) => {
                 await ride.save();
 
                 // Notify both
-                const passenger = await User.findByPk(ride.passengerId);
-                const driver = await User.findByPk(ride.driverId!);
+                const passenger = await User.findByPk(ride.passengerId, { attributes: ['id', 'name', 'phoneNumber'] });
+                const driver = await User.findByPk(ride.driverId!, { attributes: ['id', 'name', 'phoneNumber'] });
 
-                if (passenger?.socketId) io.to(passenger.socketId).emit('startConfirmed', { by: socket.user.role, ride });
-                if (driver?.socketId) io.to(driver.socketId).emit('startConfirmed', { by: socket.user.role, ride });
+                if (passenger?.socketId) io.to(passenger.socketId).emit('startConfirmed', { by: socket.user.role, ride, driver, passenger });
+                if (driver?.socketId) io.to(driver.socketId).emit('startConfirmed', { by: socket.user.role, ride, driver, passenger });
 
                 // If both confirmed, start the ride
                 if (ride.passengerConfirmedStart && ride.driverConfirmedStart) {
@@ -217,8 +242,20 @@ export const initializeSockets = (io: Server) => {
                     ride.startTime = new Date();
                     await ride.save();
 
-                    if (passenger?.socketId) io.to(passenger.socketId).emit('rideStarted', ride);
-                    if (driver?.socketId) io.to(driver.socketId).emit('rideStarted', ride);
+                    const driverData = driver ? {
+                        id: driver.id,
+                        name: driver.name,
+                        phoneNumber: driver.phoneNumber,
+                    } : null;
+
+                    const passengerData = passenger ? {
+                        id: passenger.id,
+                        name: passenger.name,
+                        phoneNumber: passenger.phoneNumber,
+                    } : null;
+
+                    if (passenger?.socketId) io.to(passenger.socketId).emit('rideStarted', { ride, driver: driverData, passenger: passengerData });
+                    if (driver?.socketId) io.to(driver.socketId).emit('rideStarted', { ride, driver: driverData, passenger: passengerData });
                 }
             } catch (error) {
                 socket.emit('error', { message: 'Failed to confirm start' });
