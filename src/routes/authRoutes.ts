@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login } from '../controllers/AuthController';
+import { register, login, refreshToken } from '../controllers/AuthController';
 import { registerDriver } from '../controllers/DriverController';
 import { upload } from '../middleware/multer';
 
@@ -12,5 +12,6 @@ router.post('/register-driver', upload.fields([
     { name: 'vehiclePhotos', maxCount: 2 }
 ]), registerDriver);
 router.post('/login', login);
+router.post('/refresh', refreshToken);
 
 export default router;

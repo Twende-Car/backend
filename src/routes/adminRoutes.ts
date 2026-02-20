@@ -1,6 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { getStats, getUsers, getAllRides, createVehicleType, getVehicleTypes, updateVehicleType, deleteVehicleType } from '../controllers/AdminController';
+import { getStats, getUsers, getAllRides, createVehicleType, getVehicleTypes, updateVehicleType, deleteVehicleType, resetUserPassword } from '../controllers/AdminController';
 import { getPendingDrivers, approveDriver } from '../controllers/DriverController';
+import { getCommissionPercentage, updateCommissionPercentage } from '../controllers/SettingsController';
+import { creditDriverWallet } from '../controllers/WalletController';
 import { authMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -31,6 +33,7 @@ router.use(isAdmin as any);
 
 router.get('/stats', getStats);
 router.get('/users', getUsers);
+router.post('/users/:id/reset-password', resetUserPassword);
 
 
 // Driver Management
@@ -39,6 +42,14 @@ router.put('/approve-driver/:id', approveDriver);
 // Vehicle Type Pricing Management
 router.post('/vehicle-types', createVehicleType);
 router.put('/vehicle-types/:id', updateVehicleType);
+router.put('/vehicle-types/:id', updateVehicleType);
 router.delete('/vehicle-types/:id', deleteVehicleType);
+
+// Commission Management
+router.get('/commission', getCommissionPercentage);
+router.post('/commission', updateCommissionPercentage);
+
+// Wallet Management
+router.post('/credit-driver', creditDriverWallet);
 
 export default router;

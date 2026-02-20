@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import authRoutes from './routes/authRoutes';
 import rideRoutes from './routes/rideRoutes';
 import adminRoutes from './routes/adminRoutes';
+import walletRoutes from './routes/walletRoutes';
 import { User } from './models/User';
 import { initializeSockets } from './sockets/rideSocket';
 
@@ -33,6 +34,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/auth', authRoutes);
 app.use('/rides', rideRoutes);
 app.use('/admin', adminRoutes);
+app.use('/wallet', walletRoutes);
 
 initializeSockets(io);
 

@@ -113,3 +113,22 @@ export const deleteVehicleType = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Error deleting vehicle type' });
     }
 };
+
+export const resetUserPassword = async (req: Request, res: Response) => {
+    try {
+        const userId = req.params.id as string;
+        const { newPassword } = req.body;
+        if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+            return res.status(400).json({ message: 'Le mot de passe doit contenir au moins 6 caractères' });
+        }
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'Utilisateur non trouvé' });
+        }
+        await user.update({ password: newPassword });
+        res.json({ message: 'Mot de passe réinitialisé avec succès' });
+    } catch (error) {
+        console.error('Error resetting user password:', error);
+        res.status(500).json({ message: 'Erreur lors de la réinitialisation du mot de passe' });
+    }
+};

@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { Ride } from '../models/Ride';
 import { RideOffer } from '../models/RideOffer';
+import { SystemSetting } from '../models/SystemSetting';
+import { Transaction } from '../models/Transaction';
 import { Op } from 'sequelize';
 
 interface AuthSocket extends Socket {
@@ -31,8 +33,18 @@ export const initializeSockets = (io: Server) => {
         );
 
         socket.on('updateLocation', async (data: { lat: number; lng: number }) => {
+            const user = await User.findByPk(socket.user.id);
+            if (user?.role === 'driver' && (user.walletBalance || 0) < 0) {
+                await User.update(
+                    { isOnline: false },
+                    { where: { id: socket.user.id } }
+                );
+                socket.emit('error', { message: 'Insufficient funds. Please top up your wallet to go online.' });
+                return;
+            }
+
             await User.update(
-                { latitude: data.lat, longitude: data.lng },
+                { latitude: data.lat, longitude: data.lng, isOnline: true },
                 { where: { id: socket.user.id } }
             );
 
@@ -285,14 +297,45 @@ export const initializeSockets = (io: Server) => {
                 ride.endTime = new Date();
                 await ride.save();
 
+                // Calculate Commission
+                const commissionSetting = await SystemSetting.findByPk('commissionPercentage');
+                const commissionPercentage = commissionSetting ? parseFloat(commissionSetting.value) : 10;
+
+                if (ride.fare) {
+                    const commissionAmount = (ride.fare * commissionPercentage) / 100;
+                    const driver = await User.findByPk(ride.driverId);
+
+                    if (driver) {
+                        driver.walletBalance = (driver.walletBalance || 0) - commissionAmount;
+                        await driver.save();
+
+                        await Transaction.create({
+                            userId: driver.id,
+                            amount: commissionAmount,
+                            type: 'DEBIT',
+                            description: `Commission for ride ${ride.id} (${commissionPercentage}%)`,
+                            rideId: ride.id
+                        });
+
+                        if (driver.socketId) {
+                            io.to(driver.socketId).emit('walletUpdated', {
+                                balance: driver.walletBalance,
+                                message: `Commission of ${commissionAmount} debited.`
+                            });
+                        }
+                    }
+                }
+
                 const passenger = await User.findByPk(ride.passengerId);
-                const driver = await User.findByPk(ride.driverId!);
                 if (passenger && passenger.socketId) {
                     io.to(passenger.socketId).emit('rideCompleted', ride);
                 }
 
-                if (driver && driver.socketId) {
-                    io.to(driver.socketId).emit('rideCompleted', ride);
+                if (ride.driverId) {
+                    const driver = await User.findByPk(ride.driverId);
+                    if (driver && driver.socketId) {
+                        io.to(driver.socketId).emit('rideCompleted', ride);
+                    }
                 }
             }
         });

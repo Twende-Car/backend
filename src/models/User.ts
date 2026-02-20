@@ -26,6 +26,7 @@ export interface UserAttributes {
     vehicleColor?: string | null;
     vehicleTypeId?: string | null;
     isApproved?: boolean | null;
+    walletBalance?: number;
 }
 
 export class User extends Model<UserAttributes> implements UserAttributes {
@@ -52,6 +53,7 @@ export class User extends Model<UserAttributes> implements UserAttributes {
     public vehicleColor!: string | null;
     public vehicleTypeId!: string | null;
     public isApproved!: boolean | null;
+    public walletBalance!: number;
 
     public async validatePassword(password: string): Promise<boolean> {
         return bcrypt.compare(password, this.password);
@@ -152,6 +154,10 @@ User.init(
         isApproved: {
             type: DataTypes.BOOLEAN,
             defaultValue: false,
+        },
+        walletBalance: {
+            type: DataTypes.FLOAT,
+            defaultValue: 0,
         },
     },
     {
