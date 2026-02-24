@@ -36,7 +36,7 @@ export const getStats = async (req: Request, res: Response) => {
 export const getUsers = async (req: Request, res: Response) => {
     try {
         const users = await User.findAll({
-            attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'createdAt'],
+            attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
             order: [['createdAt', 'DESC']]
         });
         res.json(users);

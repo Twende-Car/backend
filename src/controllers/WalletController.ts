@@ -18,12 +18,13 @@ export const creditDriverWallet = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Driver not found' });
         }
 
-        driver.walletBalance = (driver.walletBalance || 0) + parseFloat(amount);
-        await driver.save({ transaction: t });
+        const amountNum = parseFloat(amount);
+        await driver.increment('walletBalance', { by: amountNum, transaction: t });
+        await driver.reload({ transaction: t });
 
         await Transaction.create({
             userId: driver.id,
-            amount: parseFloat(amount),
+            amount: amountNum,
             type: 'CREDIT',
             description: 'Manual credit from dashboard',
         }, { transaction: t });
