@@ -301,7 +301,7 @@ export const initializeSockets = (io: Server) => {
                 const commissionSetting = await SystemSetting.findByPk('commissionPercentage');
                 const commissionPercentage = commissionSetting ? parseFloat(commissionSetting.value) : 10;
 
-                if (ride.fare) {
+                if (ride.fare && ride.driverId) {
                     const commissionAmount = (ride.fare * commissionPercentage) / 100;
                     const driver = await User.findByPk(ride.driverId);
 
