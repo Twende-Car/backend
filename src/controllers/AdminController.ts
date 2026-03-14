@@ -72,6 +72,26 @@ export const getAllRides = async (req: Request, res: Response) => {
     }
 };
 
+export const getRideById = async (req: Request, res: Response) => {
+    try {
+        const id = req.params.id as string;
+        const ride = await Ride.findByPk(id, {
+            include: [
+                { model: User, as: 'passenger', attributes: ['id', 'name', 'email', 'phoneNumber'] },
+                { model: User, as: 'driver', attributes: ['id', 'name', 'email', 'phoneNumber', 'vehicleModel', 'vehicleColor', 'vehiclePlate'] },
+                { model: VehicleType, as: 'vehicleType', attributes: ['id', 'name', 'pricePerKm'] }
+            ]
+        });
+        if (!ride) {
+            return res.status(404).json({ message: 'Course non trouvée' });
+        }
+        res.json(ride);
+    } catch (error) {
+        console.error('Error fetching ride details:', error);
+        res.status(500).json({ message: 'Error fetching ride details' });
+    }
+};
+
 export const createVehicleType = async (req: Request, res: Response) => {
     try {
         const { name, pricePerKm, description } = req.body;

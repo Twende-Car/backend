@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { getStats, getUsers, getAllRides, createVehicleType, getVehicleTypes, updateVehicleType, deleteVehicleType, resetUserPassword } from '../controllers/AdminController';
+import { getStats, getUsers, getAllRides, getRideById, createVehicleType, getVehicleTypes, updateVehicleType, deleteVehicleType, resetUserPassword } from '../controllers/AdminController';
 import { getPendingDrivers, approveDriver } from '../controllers/DriverController';
 import { getCommissionPercentage, updateCommissionPercentage } from '../controllers/SettingsController';
 import { creditDriverWallet } from '../controllers/WalletController';
@@ -25,6 +25,7 @@ router.get('/vehicle-types', getVehicleTypes);
 //pending driver for all connected users
 router.get('/pending-drivers', authMiddleware, getPendingDrivers);
 router.get('/rides', authMiddleware, getAllRides);
+router.get('/rides/:id', authMiddleware, getRideById);
 
 
 // Apply security to all routes
