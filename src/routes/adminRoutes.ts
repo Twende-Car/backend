@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { getStats, getUsers, getAllRides, getRideById, createVehicleType, getVehicleTypes, updateVehicleType, deleteVehicleType, resetUserPassword } from '../controllers/AdminController';
+import { getStats, getUsers, getUserById, getAllRides, getRideById, createVehicleType, getVehicleTypes, updateVehicleType, deleteVehicleType, resetUserPassword } from '../controllers/AdminController';
 import { getPendingDrivers, approveDriver } from '../controllers/DriverController';
 import { getCommissionPercentage, updateCommissionPercentage } from '../controllers/SettingsController';
 import { creditDriverWallet } from '../controllers/WalletController';
@@ -34,6 +34,7 @@ router.use(isAdmin as any);
 
 router.get('/stats', getStats);
 router.get('/users', getUsers);
+router.get('/users/:id', getUserById);
 router.post('/users/:id/reset-password', resetUserPassword);
 
 

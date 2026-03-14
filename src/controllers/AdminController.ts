@@ -56,6 +56,22 @@ export const getUsers = async (req: Request, res: Response) => {
     }
 };
 
+export const getUserById = async (req: Request, res: Response) => {
+    try {
+        const id = req.params.id as string;
+        const user = await User.findByPk(id, {
+            attributes: { exclude: ['password'] }
+        });
+        if (!user) {
+            return res.status(404).json({ message: 'Utilisateur non trouvé' });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error('Error fetching user details:', error);
+        res.status(500).json({ message: 'Error fetching user details' });
+    }
+};
+
 export const getAllRides = async (req: Request, res: Response) => {
     try {
         const rides = await Ride.findAll({
