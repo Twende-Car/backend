@@ -37,9 +37,10 @@ export const getUsers = async (req: Request, res: Response) => {
     try {
         const searchedRole = req.query.role;
         let users = []
-        if(searchedRole || searchedRole?.trim() !== ''){
+        const paramterRole = `${searchedRole}`
+        if(paramterRole !== 'undefined'){
             users = await User.findAll({
-                where: { role: `${searchedRole}` },
+                where: { role: paramterRole },
                 attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
                 order: [['createdAt', 'DESC']]
             });
