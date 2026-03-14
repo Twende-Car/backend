@@ -35,23 +35,23 @@ export const getStats = async (req: Request, res: Response) => {
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
-        const searchedRole = req.query.role
+        const searchedRole = req.query.role;
+        let users = []
         if(searchedRole || searchedRole?.trim() !== ''){
-            const users = await User.findAll({
+            users = await User.findAll({
                 where: { role: `${searchedRole}` },
                 attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
                 order: [['createdAt', 'DESC']]
             });
-            res.json(users);
+            return res.json(users);
         }
-        const users = await User.findAll({
+        users = await User.findAll({
             attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
             order: [['createdAt', 'DESC']]
         });
         res.json(users);
-    } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ message: 'Error fetching users' });
+    } catch (error: any) {
+        res.status(500).json({ message: `Error fetching users : ${error?.message}` });
     }
 };
 
