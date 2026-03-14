@@ -132,9 +132,8 @@ export const initializeSockets = (io: Server) => {
 
                 socket.emit('rideRequested', { ride, estimatedFare: data.estimatedFare });
 
-            } catch (error) {
-                console.error('Ride request error', error);
-                socket.emit('error', { message: 'Failed to request ride' });
+            } catch (error: any) {
+                socket.emit('errorRideRequest', { message: 'Failed to request ride: ' + error.message });
             }
         });
 
