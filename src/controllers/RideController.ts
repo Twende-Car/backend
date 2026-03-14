@@ -83,7 +83,6 @@ export const getAvailableRides = async (req: Request, res: Response) => {
         const rides = await Ride.findAll({
             where: {
                 status: 'REQUESTED',
-                vehicleTypeId: driver.vehicleTypeId
             },
             include: [
                 { model: User, as: 'passenger', attributes: ['id', 'name'] }
@@ -103,7 +102,7 @@ export const getAvailableRides = async (req: Request, res: Response) => {
             };
         }).filter(ride => {
             if (!driverLat || !driverLng) return true; // Return all if driver loc unknown
-            return ride.distanceToPickup! <= 10;
+            return ride.distanceToPickup! <= 50;
         });
 
         res.json(nearbyRides);
