@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import { Ride } from '../models/Ride';
+import { RideOffer } from '../models/RideOffer';
 import { User } from '../models/User';
 import { VehicleType } from '../models/VehicleType';
+import { Op } from 'sequelize';
 
 export const estimateFare = async (req: Request, res: Response) => {
     try {
@@ -17,6 +19,109 @@ export const estimateFare = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error estimating fare:', error);
         res.status(500).json({ message: 'Error calculating estimation' });
+    }
+};
+
+/** Client: get REQUESTED ride with pending offers (for history / restore after error) */
+export const getActiveRequest = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const ride = await Ride.findOne({
+            where: { passengerId: userId, status: 'REQUESTED' },
+            include: [{ model: VehicleType, as: 'vehicleType', attributes: ['id', 'name', 'pricePerKm'] }]
+        });
+        if (!ride) return res.json(null);
+        const offers = await RideOffer.findAll({
+            where: { rideId: ride.id, status: 'PENDING' },
+            include: [{ model: User, as: 'driver', attributes: ['id', 'name', 'vehicleModel', 'vehicleBrand', 'vehicleColor', 'vehiclePlate', 'vehiclePhotos'] }]
+        });
+        const offersWithDriver = offers.map(o => {
+            const offer = o.toJSON();
+            const driver = (offer as any).driver;
+            return { offer: { id: offer.id, price: offer.price, rideId: offer.rideId }, driver: driver ? { name: driver.name, vehicleModel: [driver.vehicleBrand, driver.vehicleModel].filter(Boolean).join(' '), vehicleColor: driver.vehicleColor, vehiclePlate: driver.vehiclePlate, vehiclePhoto: driver.vehiclePhotos?.[0], rating: 4.5 } : null };
+        });
+        res.json({ ride, offers: offersWithDriver });
+    } catch (error) {
+        console.error('Error fetching active request:', error);
+        res.status(500).json({ message: 'Error fetching active request' });
+    }
+};
+
+/** Client: get current ride (REQUESTED with offers, or ACCEPTED/IN_PROGRESS with driver) for state restore */
+export const getCurrentRide = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const ride = await Ride.findOne({
+            where: { passengerId: userId, status: { [Op.in]: ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'] } },
+            include: [{ model: VehicleType, as: 'vehicleType', attributes: ['id', 'name', 'pricePerKm'] }],
+            order: [['createdAt', 'DESC']]
+        });
+        if (!ride) return res.json(null);
+        const rideJson = ride.toJSON() as any;
+        if (ride.status === 'REQUESTED') {
+            const offers = await RideOffer.findAll({
+                where: { rideId: ride.id, status: 'PENDING' },
+                include: [{ model: User, as: 'driver', attributes: ['id', 'name', 'vehicleModel', 'vehicleBrand', 'vehicleColor', 'vehiclePlate', 'vehiclePhotos'] }]
+            });
+            const offersWithDriver = offers.map(o => {
+                const offer = o.toJSON();
+                const driver = (offer as any).driver;
+                return { offer: { id: offer.id, price: offer.price, rideId: offer.rideId }, driver: driver ? { name: driver.name, vehicleModel: [driver.vehicleBrand, driver.vehicleModel].filter(Boolean).join(' '), vehicleColor: driver.vehicleColor, vehiclePlate: driver.vehiclePlate, vehiclePhoto: driver.vehiclePhotos?.[0], rating: 4.5 } : null };
+            });
+            return res.json({ ride: rideJson, offers: offersWithDriver });
+        }
+        const driver = ride.driverId ? await User.findByPk(ride.driverId, { attributes: ['id', 'name', 'phoneNumber', 'vehicleBrand', 'vehicleModel', 'vehiclePlate', 'vehicleColor', 'vehiclePhotos'] }) : null;
+        res.json({ ride: rideJson, driver: driver ? { id: driver.id, name: driver.name, phoneNumber: driver.phoneNumber, vehicleBrand: driver.vehicleBrand, vehicleModel: driver.vehicleModel, vehiclePlate: driver.vehiclePlate, vehicleColor: driver.vehicleColor, vehiclePhoto: (driver as any).vehiclePhotos?.[0] } : null });
+    } catch (error) {
+        console.error('Error fetching current ride:', error);
+        res.status(500).json({ message: 'Error fetching current ride' });
+    }
+};
+
+/** Client: accept an offer by ID (REST fallback when socket was disconnected) */
+export const acceptOfferByApi = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const offerId = req.params.offerId as string;
+        const offer = await RideOffer.findByPk(offerId);
+        if (!offer) return res.status(404).json({ message: 'Offre introuvable' });
+        const ride = await Ride.findByPk(offer.rideId);
+        if (!ride || ride.passengerId !== userId) return res.status(403).json({ message: 'Accès refusé' });
+        if (ride.status !== 'REQUESTED') return res.status(400).json({ message: 'Cette course n\'est plus disponible' });
+
+        offer.status = 'ACCEPTED';
+        await offer.save();
+        const driver = await User.findByPk(offer.driverId);
+        ride.driverId = offer.driverId;
+        ride.fare = offer.price;
+        ride.status = 'ACCEPTED';
+        if (driver) {
+            ride.vehicleModel = driver.vehicleModel;
+            ride.vehicleColor = driver.vehicleColor;
+            ride.vehicleRegistration = driver.vehiclePlate;
+        }
+        await ride.save();
+
+        await RideOffer.update({ status: 'REJECTED' }, { where: { rideId: ride.id, id: { [Op.ne]: offer.id } } });
+
+        const io = (req as any).app.get('io');
+        if (io && driver?.socketId) io.to(driver.socketId).emit('offerAccepted', { ride });
+        if (io) io.to('drivers').emit('rideNoLongerAvailable', { rideId: ride.id });
+
+        const driverPayload = driver ? {
+            id: driver.id,
+            name: driver.name,
+            phoneNumber: driver.phoneNumber,
+            vehicleBrand: driver.vehicleBrand,
+            vehicleModel: driver.vehicleModel,
+            vehiclePlate: driver.vehiclePlate,
+            vehicleColor: driver.vehicleColor,
+            vehiclePhoto: (driver as any).vehiclePhotos?.[0] || null
+        } : null;
+        res.json({ ride, driver: driverPayload });
+    } catch (error) {
+        console.error('Error accepting offer:', error);
+        res.status(500).json({ message: 'Error accepting offer' });
     }
 };
 
