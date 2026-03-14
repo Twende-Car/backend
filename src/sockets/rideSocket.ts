@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { Ride } from '../models/Ride';
 import { RideOffer } from '../models/RideOffer';
+import { VehicleType } from '../models/VehicleType';
 import { SystemSetting } from '../models/SystemSetting';
 import { Transaction } from '../models/Transaction';
 import { Op } from 'sequelize';
@@ -31,6 +32,11 @@ export const initializeSockets = (io: Server) => {
             { socketId: socket.id, isOnline: true },
             { where: { id: socket.user.id } }
         );
+
+        // Drivers join a room so we can broadcast "ride no longer available"
+        if (socket.user.role === 'driver') {
+            socket.join('drivers');
+        }
 
         socket.on('updateLocation', async (data: { lat: number; lng: number }) => {
             const user = await User.findByPk(socket.user.id);
@@ -79,6 +85,9 @@ export const initializeSockets = (io: Server) => {
             dropoffAddress?: string;
             distance?: number;
             vehicleTypeId: string;
+            passengerName: string;
+            passengerPhone: string;
+            estimatedFare?: number;
         }) => {
             try {
                 // Create Ride without fare (will be decided via bidding)
@@ -113,13 +122,15 @@ export const initializeSockets = (io: Server) => {
                             io.to(driver.socketId).emit('newRideRequest', {
                                 ...ride.toJSON(),
                                 passengerName: passenger?.name || 'Passager',
+                                passengerPhone: passenger?.phoneNumber || null,
+                                passenger: passenger ? { name: passenger.name, phoneNumber: passenger.phoneNumber } : null,
                                 distanceToPickup: dist
                             });
                         }
                     }
                 });
 
-                socket.emit('rideRequested', ride);
+                socket.emit('rideRequested', { ride, estimatedFare: data.estimatedFare });
 
             } catch (error) {
                 console.error('Ride request error', error);
@@ -196,6 +207,11 @@ export const initializeSockets = (io: Server) => {
                     io.to(driver.socketId).emit('offerAccepted', { ride });
                 }
 
+                // Notify other drivers that this ride is no longer available
+                if (driver?.socketId) {
+                    socket.to('drivers').emit('rideNoLongerAvailable', { rideId: ride.id });
+                }
+
                 // Notify passenger
                 if (driver) {
                     socket.emit('rideAcceptedSuccess', {
@@ -218,6 +234,65 @@ export const initializeSockets = (io: Server) => {
             } catch (error) {
                 console.error('Accept offer error:', error);
                 socket.emit('error', { message: 'Failed to accept offer' });
+            }
+        });
+
+        socket.on('driverAcceptRide', async (data: { rideId: string }) => {
+            try {
+                const ride = await Ride.findByPk(data.rideId);
+                if (!ride) return socket.emit('error', { message: 'Course introuvable' });
+                if (ride.status !== 'REQUESTED') return socket.emit('error', { message: 'Cette course a déjà été acceptée par un autre chauffeur' });
+
+                const driver = await User.findByPk(socket.user.id);
+                if (!driver || driver.role !== 'driver') return socket.emit('error', { message: 'Accès refusé' });
+
+                let distanceKm = ride.distance;
+                if (distanceKm == null || distanceKm <= 0) {
+                    distanceKm = getDistanceFromLatLonInKm(ride.pickupLat, ride.pickupLng, ride.dropoffLat, ride.dropoffLng);
+                }
+                const vehicleType = ride.vehicleTypeId ? await VehicleType.findByPk(ride.vehicleTypeId) : null;
+                const pricePerKm = vehicleType?.pricePerKm ?? 500;
+                const fare = Math.round(distanceKm * pricePerKm);
+
+                ride.driverId = socket.user.id;
+                ride.fare = fare;
+                ride.status = 'ACCEPTED';
+                ride.vehicleModel = driver.vehicleModel || null;
+                ride.vehicleColor = driver.vehicleColor || null;
+                ride.vehicleRegistration = driver.vehiclePlate || null;
+                if (ride.distance == null) ride.distance = distanceKm;
+                await ride.save();
+
+                const passenger = await User.findByPk(ride.passengerId, { attributes: ['id', 'name', 'phoneNumber'] });
+
+                // Notify this driver (with passenger so details modal can show contact)
+                io.to(socket.id).emit('offerAccepted', {
+                    ride,
+                    passenger: passenger ? { name: passenger.name, phoneNumber: passenger.phoneNumber } : null
+                });
+
+                // Notify other drivers that this ride is no longer available
+                socket.to('drivers').emit('rideNoLongerAvailable', { rideId: ride.id });
+
+                // Notify passenger
+                if (passenger?.socketId) {
+                    io.to(passenger.socketId).emit('rideAcceptedByDriver', {
+                        ride,
+                        driver: {
+                            id: driver.id,
+                            name: driver.name,
+                            phoneNumber: driver.phoneNumber,
+                            vehicleBrand: driver.vehicleBrand,
+                            vehicleModel: driver.vehicleModel,
+                            vehiclePlate: driver.vehiclePlate,
+                            vehicleColor: driver.vehicleColor,
+                            vehiclePhoto: driver.vehiclePhotos?.[0] || null
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('driverAcceptRide error:', error);
+                socket.emit('error', { message: 'Impossible d\'accepter la course' });
             }
         });
 

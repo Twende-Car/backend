@@ -85,7 +85,7 @@ export const getAvailableRides = async (req: Request, res: Response) => {
                 status: 'REQUESTED',
             },
             include: [
-                { model: User, as: 'passenger', attributes: ['id', 'name'] }
+                { model: User, as: 'passenger', attributes: ['id', 'name', 'phoneNumber'] }
             ],
             order: [['createdAt', 'DESC']]
         });
