@@ -35,6 +35,15 @@ export const getStats = async (req: Request, res: Response) => {
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
+        const searchedRole = req.query.role
+        if(searchedRole || searchedRole?.trim() !== ''){
+            const users = await User.findAll({
+                where: { role: `${searchedRole}` },
+                attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
+                order: [['createdAt', 'DESC']]
+            });
+            res.json(users);
+        }
         const users = await User.findAll({
             attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
             order: [['createdAt', 'DESC']]
