@@ -92,6 +92,52 @@ export const login = async (req: Request, res: Response) => {
     }
 };
 
+export const adminLogin = async (req: Request, res: Response) => {
+    try {
+        const { email, password } = req.body;
+
+        const user = await User.findOne({ where: { email } });
+        if (!user) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const isMatch = await user.validatePassword(password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        if (user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied. Admin role required.' });
+        }
+
+        const token = jwt.sign(
+            { id: user.id, email: user.email, role: user.role },
+            process.env.JWT_SECRET || 'secret_key',
+            { expiresIn: '1h' }
+        );
+        const refreshToken = jwt.sign(
+            { id: user.id, email: user.email, role: user.role, type: 'refresh' },
+            process.env.JWT_SECRET || 'secret_key',
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            token,
+            refreshToken,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                phone: user.phoneNumber
+            }
+        });
+    } catch (error) {
+        console.error('Error logging in admin:', error);
+        res.status(500).json({ message: 'Error logging in admin', error });
+    }
+};
+
 export const refreshToken = async (req: Request, res: Response) => {
     try {
         const { refreshToken: refreshTokenBody } = req.body;

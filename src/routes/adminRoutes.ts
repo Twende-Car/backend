@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { getStats, getUsers, getUserById, getAllRides, getRideById, createVehicleType, getVehicleTypes, updateVehicleType, deleteVehicleType, resetUserPassword } from '../controllers/AdminController';
+import { adminLogin } from '../controllers/AuthController';
 import { getPendingDrivers, approveDriver } from '../controllers/DriverController';
 import { getCommissionPercentage, updateCommissionPercentage } from '../controllers/SettingsController';
 import { creditDriverWallet } from '../controllers/WalletController';
@@ -21,6 +22,7 @@ const isAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
 
 //get vehicule type without auth
 router.get('/vehicle-types', getVehicleTypes);
+router.post('/auth/login', adminLogin);
 
 //pending driver for all connected users
 router.get('/pending-drivers', authMiddleware, getPendingDrivers);
