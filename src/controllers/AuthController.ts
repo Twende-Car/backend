@@ -59,6 +59,10 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
+        if (!user.isActive) {
+            return res.status(403).json({ message: 'Votre compte a été désactivé. Veuillez contacter le support.' });
+        }
+
         if (user.role === 'driver' && !user.isApproved) {
             return res.status(403).json({ message: 'Your account is pending approval.' });
         }
@@ -104,6 +108,10 @@ export const adminLogin = async (req: Request, res: Response) => {
         const isMatch = await user.validatePassword(password);
         if (!isMatch) {
             return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        if (!user.isActive) {
+            return res.status(403).json({ message: 'Votre compte administrateur a été désactivé.' });
         }
 
         if (user.role !== 'admin') {

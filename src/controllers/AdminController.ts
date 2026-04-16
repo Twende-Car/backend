@@ -38,16 +38,16 @@ export const getUsers = async (req: Request, res: Response) => {
         const searchedRole = req.query.role;
         let users = []
         const paramterRole = `${searchedRole}`
-        if(paramterRole !== 'undefined'){
+        if (paramterRole !== 'undefined') {
             users = await User.findAll({
                 where: { role: paramterRole },
-                attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
+                attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'isActive', 'createdAt'],
                 order: [['createdAt', 'DESC']]
             });
             return res.json(users);
         }
         users = await User.findAll({
-            attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'createdAt'],
+            attributes: ['id', 'name', 'email', 'role', 'phoneNumber', 'isOnline', 'walletBalance', 'isActive', 'createdAt'],
             order: [['createdAt', 'DESC']]
         });
         res.json(users);
@@ -176,5 +176,46 @@ export const resetUserPassword = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error resetting user password:', error);
         res.status(500).json({ message: 'Erreur lors de la réinitialisation du mot de passe' });
+    }
+};
+
+export const updateUser = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        let myId: any = id;
+        const { name, email, phoneNumber } = req.body;
+
+        const user = await User.findByPk(myId);
+        if (!user) {
+            return res.status(404).json({ message: 'Utilisateur non trouvé' });
+        }
+
+        await user.update({ name, email, phoneNumber });
+        res.json({ message: 'Utilisateur mis à jour avec succès', user });
+    } catch (error: any) {
+        console.error('Error updating user:', error);
+        res.status(500).json({ message: `Erreur lors de la mise à jour : ${error?.message}` });
+    }
+};
+
+export const toggleUserStatus = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        let myId: any = id
+        const user = await User.findByPk(myId);
+        if (!user) {
+            return res.status(404).json({ message: 'Utilisateur non trouvé' });
+        }
+
+        const newStatus = !user.isActive;
+        await user.update({ isActive: newStatus });
+
+        res.json({
+            message: `Utilisateur ${newStatus ? 'activé' : 'désactivé'} avec succès`,
+            isActive: newStatus
+        });
+    } catch (error: any) {
+        console.error('Error toggling user status:', error);
+        res.status(500).json({ message: `Erreur lors du changement de statut : ${error?.message}` });
     }
 };
